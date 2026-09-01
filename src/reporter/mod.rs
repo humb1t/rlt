@@ -9,6 +9,9 @@
 //!   Ideal for terminal viewing.
 //! - [`JsonReporter`] - Machine-readable JSON output with all statistics.
 //!   Ideal for CI/CD integration, data analysis, or piping to other tools.
+//! - [`BencherReporter`] - libtest bencher lines for
+//!   [github-action-benchmark](https://github.com/benchmark-action/github-action-benchmark),
+//!   for tracking a metric across runs.
 //!
 //! # Baseline Comparison
 //!
@@ -26,9 +29,11 @@
 //! reporter.print(&mut output, &report, None)?;
 //! ```
 
+mod bencher;
 mod json;
 mod text;
 
+pub use bencher::BencherReporter;
 pub use json::JsonReporter;
 pub use text::TextReporter;
 

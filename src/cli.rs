@@ -68,7 +68,7 @@ use crate::BenchSuite;
 use crate::baseline::{self, BaselineName, RegressionMetric, Verdict};
 use crate::clock::Clock;
 use crate::error::ReporterError;
-use crate::reporter::{BenchReporter, JsonReporter, TextReporter};
+use crate::reporter::{BenchReporter, BencherReporter, JsonReporter, TextReporter};
 use crate::runner::BenchOpts;
 use crate::schedule::LoadModel;
 use crate::session::BenchSession;
@@ -158,6 +158,13 @@ pub struct BenchCli {
     /// Output format for the report
     #[clap(short, long, value_enum, default_value_t = ReportFormat::Text, ignore_case = true)]
     pub output: ReportFormat,
+
+    /// Namespace every bencher metric with this prefix
+    ///
+    /// Only used by `--output bencher`. Keeps several phases of one run apart in the
+    /// same tracked history.
+    #[clap(long)]
+    pub bencher_prefix: Option<String>,
 
     /// Output file path for the report
     ///
@@ -261,6 +268,9 @@ pub enum ReportFormat {
 
     /// Report in JSON format. See [`JsonReporter`].
     Json,
+
+    /// Report as libtest bencher lines. See [`BencherReporter`].
+    Bencher,
 }
 
 /// Run the benchmark with the given CLI options and benchmark suite.
@@ -289,9 +299,29 @@ where
         session.with_tui(TuiSettings { fps: cli.fps, auto_quit: !cli.quit_manually }).run().await
     }?;
 
-    // Compute comparison using pre-loaded baseline
-    let cmp = baseline
-        .map(|b| baseline::compare(&report, &b, cli.noise_threshold, &cli.regression_metrics));
+    // Compute comparison using pre-loaded baseline.
+    //
+    // An open-loop run's rate is an input rather than a result — it echoes --rate back —
+    // so comparing it against a baseline would report a regression whenever that flag
+    // moves. Latency and success ratio stay meaningful, so only the rates are dropped.
+    let regression_metrics: Vec<_> = match report.offered > 0 {
+        false => cli.regression_metrics.clone(),
+        true => cli
+            .regression_metrics
+            .iter()
+            .copied()
+            .filter(|m| {
+                !matches!(
+                    m,
+                    RegressionMetric::ItersRate
+                        | RegressionMetric::ItemsRate
+                        | RegressionMetric::BytesRate
+                )
+            })
+            .collect(),
+    };
+    let cmp =
+        baseline.map(|b| baseline::compare(&report, &b, cli.noise_threshold, &regression_metrics));
 
     // Print report with comparison
     let mut output: Box<dyn std::io::Write> = match &cli.output_file {
@@ -305,6 +335,11 @@ where
     match cli.output {
         ReportFormat::Text => TextReporter.print(&mut output, &report, cmp.as_ref())?,
         ReportFormat::Json => JsonReporter.print(&mut output, &report, cmp.as_ref())?,
+        ReportFormat::Bencher => BencherReporter::new(cli.bencher_prefix.clone()).print(
+            &mut output,
+            &report,
+            cmp.as_ref(),
+        )?,
     }
 
     // Save baseline if requested (after comparison, so we can compare-then-save)

@@ -119,8 +119,9 @@ All benchmarks built with rlt include these CLI options:
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--output` | `-o` | Output format: `text` or `json` |
+| `--output` | `-o` | Output format: `text`, `json` or `bencher` |
 | `--output-file` | `-O` | Write report to file instead of stdout |
+| `--bencher-prefix` | | Namespace bencher metrics (`--output bencher` only) |
 | `--collector` | | Collector type: `tui` or `silent` |
 | `--fps` | | TUI refresh rate (frames per second) |
 | `--quit-manually` | | Require manual quit (TUI only) |
@@ -195,6 +196,30 @@ asked for never happened — which is the difference between "the target is runn
 
 The open model requires `--rate` and the `rate_limit` feature. Warm-up iterations are not
 scheduled; they run closed-loop in both models.
+
+### Bencher Output
+
+`--output bencher` writes libtest benchmark lines, which
+[github-action-benchmark](https://github.com/benchmark-action/github-action-benchmark)
+ingests with its `cargo` tool setting:
+
+```text
+test latency/mean ... bench: 1029226 ns/iter (+/- 77286)
+test latency/p50 ... bench: 1027583 ns/iter (+/- 0)
+test latency/p90 ... bench: 1042943 ns/iter (+/- 0)
+test latency/p99 ... bench: 1068031 ns/iter (+/- 0)
+test latency/max ... bench: 2043903 ns/iter (+/- 0)
+test throughput ... bench: 257837 ns/iter (+/- 0)
+```
+
+Everything is nanoseconds per iteration — the only unit the format carries — so
+throughput appears as its reciprocal and lower is better throughout. Several phases can
+share one tracked history by giving each a `--bencher-prefix`.
+
+In the open load model the throughput line is omitted: the rate there is an input, so
+tracking it would record a change every time `--rate` moves. Latency is reported in both
+models, and for the same reason the rate metrics are dropped from `--fail-on-regression`
+comparisons of an open-loop run.
 
 ### Baseline Comparison
 
