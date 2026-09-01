@@ -77,3 +77,14 @@ Run examples with:
 cargo run --example simple_stateless -- -c 4 -d 10s
 cargo run --example http_reqwest -- --url http://example.com -c 10
 ```
+
+## Fork conventions
+
+This repository is Exein's development fork of `wfxr/rlt`; `exein-io/rlt` mirrors it
+daily. See [FORK.md](FORK.md) for the patch set and its upstream status.
+
+- Never force-push `main` — the mirror syncs by merge.
+- One branch per patch, so each stays cherry-pickable for an upstream PR.
+- Before pushing: `cargo +nightly fmt --check`, `cargo clippy --all-targets
+  --all-features -- -D warnings`, `cargo test --locked --all-features --all-targets`,
+  `cargo test --locked --all-features --doc`.

@@ -3,12 +3,13 @@
 # information about how the concurrency cancellation and workflow triggering works
 permissions:
   contents: read
+# Fork note: the nightly cron is disabled here. A daily `cargo update` + beta run on a
+# fork produces red mail nobody owns; run it on demand from the Actions tab instead.
 on:
   push:
     branches: [main]
   pull_request:
-  schedule:
-    - cron:  '7 7 * * *'
+  workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
