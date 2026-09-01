@@ -23,7 +23,7 @@ use crate::phase::{BenchPhase, PauseControl};
 use crate::report::IterReport;
 #[cfg(feature = "rate_limit")]
 use crate::schedule;
-use crate::schedule::{LoadModel, ScheduleCounters};
+use crate::schedule::{LoadModel, Pacing, ScheduleCounters};
 use crate::suite::BenchSuite;
 
 /// Core options for the benchmark runner.
@@ -56,6 +56,13 @@ pub struct BenchOpts {
     ///
     /// [`LoadModel::Open`] requires a rate and the `rate_limit` feature.
     pub load_model: LoadModel,
+
+    /// What set the pace, and therefore whether throughput is a result worth tracking.
+    ///
+    /// Defaults to whatever the [`load_model`](Self::load_model) implies; set it
+    /// explicitly when the workers are held back by the harness rather than by the
+    /// target. See [`Pacing`].
+    pub pacing: Pacing,
 }
 
 impl Default for BenchOpts {
@@ -69,6 +76,7 @@ impl Default for BenchOpts {
             #[cfg(feature = "rate_limit")]
             rate: None,
             load_model: LoadModel::Closed,
+            pacing: Pacing::Platform,
         }
     }
 }
@@ -97,6 +105,7 @@ pub struct BenchOptsBuilder {
     warmups: u64,
     rate: Option<u32>,
     load_model: LoadModel,
+    pacing: Option<Pacing>,
 }
 
 impl Default for BenchOptsBuilder {
@@ -109,6 +118,7 @@ impl Default for BenchOptsBuilder {
             warmups: 0,
             rate: None,
             load_model: LoadModel::Closed,
+            pacing: None,
         }
     }
 }
@@ -160,6 +170,16 @@ impl BenchOptsBuilder {
         self
     }
 
+    /// Declare what set the pace, overriding what the load model implies.
+    ///
+    /// Needed when a closed-loop run is bounded by the harness — a concurrency limit, a
+    /// semaphore, a fixed slice of work — rather than by the target, because then its
+    /// rate is not a measurement of the target either. See [`Pacing`].
+    pub fn pacing(mut self, pacing: Pacing) -> Self {
+        self.pacing = Some(pacing);
+        self
+    }
+
     /// Build [`BenchOpts`].
     pub fn build(self) -> std::result::Result<BenchOpts, ConfigError> {
         if self.concurrency == 0 {
@@ -198,6 +218,7 @@ impl BenchOptsBuilder {
             #[cfg(feature = "rate_limit")]
             rate,
             load_model: self.load_model,
+            pacing: self.pacing.unwrap_or_else(|| self.load_model.pacing()),
         })
     }
 }
