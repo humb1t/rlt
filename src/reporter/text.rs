@@ -158,7 +158,7 @@ fn print_summary(w: &mut dyn Write, report: &BenchReport) -> ReporterResult<()> 
                         render_success_ratio(100.0 * report.success_ratio()))?;
     writeln!(w)?;
 
-    let stats = vec![
+    let mut stats = vec![
         vec!["".into(), "Total".into(), "Rate".into()],
         vec![
             "Iters".into(),
@@ -176,6 +176,22 @@ fn print_summary(w: &mut dyn Write, report: &BenchReport) -> ReporterResult<()> 
             format!("{}/s", rate(overall.bytes, elapsed).human_bytes(2)),
         ],
     ];
+
+    // Only the open load model has a schedule to fall short of.
+    if report.offered > 0 {
+        stats.push(vec![
+            "Offered".into(),
+            format!("{}", report.offered),
+            format!("{:.2}/s", rate(report.offered, elapsed)),
+        ]);
+        stats.push(vec![
+            "Dropped".into(),
+            format!("{}", report.dropped),
+            format!("{:.2}/s", rate(report.dropped, elapsed)),
+        ]);
+    }
+
+    let last_row = stats.len() - 1;
     let mut stats = Builder::from(stats).build();
     stats
         .with(Style::empty())
@@ -183,7 +199,10 @@ fn print_summary(w: &mut dyn Write, report: &BenchReport) -> ReporterResult<()> 
         .with(Padding::new(2, 2, 0, 0))
         .with(Colorization::exact([Color::BOLD], Cell::new(0, 1)))
         .with(Colorization::exact([Color::BOLD], Cell::new(0, 2)))
-        .with(Colorization::exact([Color::FG_GREEN], Rows::new(1..=4).not(Columns::new(0..=0))))
+        .with(Colorization::exact(
+            [Color::FG_GREEN],
+            Rows::new(1..=last_row).not(Columns::new(0..=0)),
+        ))
         .modify(FirstRow, Alignment::center())
     ;
 

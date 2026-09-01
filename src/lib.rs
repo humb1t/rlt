@@ -56,6 +56,7 @@ pub mod error;
 mod histogram;
 mod phase;
 mod report;
+pub mod schedule;
 mod status;
 mod util;
 
@@ -77,5 +78,6 @@ pub use crate::error::{BenchError, BenchResult, Error, Result};
 pub use crate::phase::{BenchPhase, PauseControl, RunState};
 pub use crate::report::{BenchReport, IterReport};
 pub use crate::runner::{BenchOpts, BenchOptsBuilder, IterInfo};
+pub use crate::schedule::{LoadModel, ScheduleCounters};
 pub use crate::status::{Status, StatusKind};
 pub use crate::suite::{BenchSuite, StatelessBenchSuite};

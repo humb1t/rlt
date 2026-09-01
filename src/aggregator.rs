@@ -11,6 +11,7 @@
 //! - When combined with [`JsonReporter`](crate::reporter::JsonReporter) for machine-readable output
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use futures::channel::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -19,6 +20,7 @@ use crate::Error;
 use crate::histogram::LatencyHistogram;
 use crate::report::{BenchReport, IterReport};
 use crate::runner::BenchOpts;
+use crate::schedule::ScheduleCounters;
 use crate::stats::IterStats;
 
 /// A silent report collector that aggregates results without terminal output.
@@ -32,6 +34,7 @@ pub(crate) struct Aggregator {
     bench_opts: BenchOpts,
     res_rx: mpsc::UnboundedReceiver<Result<IterReport, String>>,
     cancel: CancellationToken,
+    counters: Arc<ScheduleCounters>,
 }
 
 impl Aggregator {
@@ -40,8 +43,9 @@ impl Aggregator {
         bench_opts: BenchOpts,
         res_rx: mpsc::UnboundedReceiver<Result<IterReport, String>>,
         cancel: CancellationToken,
+        counters: Arc<ScheduleCounters>,
     ) -> Self {
-        Self { bench_opts, res_rx, cancel }
+        Self { bench_opts, res_rx, cancel, counters }
     }
 }
 
@@ -70,6 +74,15 @@ impl Aggregator {
 
         let elapsed = self.bench_opts.clock.elapsed();
         let concurrency = self.bench_opts.concurrency;
-        Ok(BenchReport { concurrency, hist, stats, status_dist, error_dist, elapsed })
+        Ok(BenchReport {
+            concurrency,
+            hist,
+            stats,
+            status_dist,
+            error_dist,
+            elapsed,
+            offered: self.counters.offered(),
+            dropped: self.counters.dropped(),
+        })
     }
 }

@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use tokio::select;
-use tokio::sync::{Barrier, watch};
+use tokio::sync::{Barrier, mpsc, watch};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
@@ -21,6 +21,7 @@ use crate::error::{BenchResult, ConfigError, Error, Result};
 use crate::observer::Observer;
 use crate::phase::{BenchPhase, PauseControl};
 use crate::report::IterReport;
+use crate::schedule::{self, LoadModel, ScheduleCounters};
 use crate::suite::BenchSuite;
 
 /// Core options for the benchmark runner.
@@ -48,6 +49,11 @@ pub struct BenchOpts {
     #[cfg(feature = "rate_limit")]
     /// Rate limit for benchmarking, in iterations per second (ips).
     pub rate: Option<NonZeroU32>,
+
+    /// How iterations are paced: back-to-back workers, or an authoritative schedule.
+    ///
+    /// [`LoadModel::Open`] requires a rate and the `rate_limit` feature.
+    pub load_model: LoadModel,
 }
 
 impl Default for BenchOpts {
@@ -60,6 +66,7 @@ impl Default for BenchOpts {
             warmups: 0,
             #[cfg(feature = "rate_limit")]
             rate: None,
+            load_model: LoadModel::Closed,
         }
     }
 }
@@ -87,6 +94,7 @@ pub struct BenchOptsBuilder {
     duration: Option<Duration>,
     warmups: u64,
     rate: Option<u32>,
+    load_model: LoadModel,
 }
 
 impl Default for BenchOptsBuilder {
@@ -98,6 +106,7 @@ impl Default for BenchOptsBuilder {
             duration: None,
             warmups: 0,
             rate: None,
+            load_model: LoadModel::Closed,
         }
     }
 }
@@ -141,6 +150,14 @@ impl BenchOptsBuilder {
         self
     }
 
+    /// Set how iterations are paced.
+    ///
+    /// [`LoadModel::Open`] needs a rate; [`build`](Self::build) returns an error without one.
+    pub fn load_model(mut self, load_model: LoadModel) -> Self {
+        self.load_model = load_model;
+        self
+    }
+
     /// Build [`BenchOpts`].
     pub fn build(self) -> std::result::Result<BenchOpts, ConfigError> {
         if self.concurrency == 0 {
@@ -161,6 +178,15 @@ impl BenchOptsBuilder {
             return Err(ConfigError::RateLimitFeatureDisabled);
         }
 
+        if self.load_model == LoadModel::Open {
+            // Without a rate there is no schedule to be authoritative about.
+            if self.rate.is_none() {
+                return Err(ConfigError::OpenLoadModelNeedsRate);
+            }
+            #[cfg(not(feature = "rate_limit"))]
+            return Err(ConfigError::RateLimitFeatureDisabled);
+        }
+
         Ok(BenchOpts {
             clock: self.clock,
             concurrency: self.concurrency,
@@ -169,6 +195,7 @@ impl BenchOptsBuilder {
             warmups: self.warmups,
             #[cfg(feature = "rate_limit")]
             rate,
+            load_model: self.load_model,
         })
     }
 }
@@ -183,6 +210,7 @@ pub(crate) struct Runner<BS, O> {
     cancel: CancellationToken,
     seq: Arc<AtomicU64>,
     phase_tx: watch::Sender<BenchPhase>,
+    counters: Arc<ScheduleCounters>,
 }
 
 /// Information about the current iteration.
@@ -219,8 +247,9 @@ where
         pause: Arc<PauseControl>,
         cancel: CancellationToken,
         phase_tx: watch::Sender<BenchPhase>,
+        counters: Arc<ScheduleCounters>,
     ) -> Self {
-        Self { suite, opts, observer, pause, cancel, seq: Arc::default(), phase_tx }
+        Self { suite, opts, observer, pause, cancel, seq: Arc::default(), phase_tx, counters }
     }
 
     async fn iteration(
@@ -245,13 +274,51 @@ where
         let iters = self.opts.iterations;
         let warmup_iters = self.opts.warmups;
 
+        let open_loop = self.opts.load_model == LoadModel::Open;
+
         // the trait `governor::clock::Clock` is not implemented for `&clock::Clock`
         #[cfg(feature = "rate_limit")]
-        let buckets = self.opts.rate.map(|r| {
-            let quota = Quota::per_second(r).allow_burst(nonzero!(1u32));
-            let clock = self.opts.clock.clone();
-            Arc::new(RateLimiter::direct_with_clock(quota, clock))
-        });
+        let buckets = match open_loop {
+            // The open model has its own dispatcher; a bucket here would throttle the
+            // workers a second time.
+            true => None,
+            false => self.opts.rate.map(|r| {
+                let quota = Quota::per_second(r).allow_burst(nonzero!(1u32));
+                let clock = self.opts.clock.clone();
+                Arc::new(RateLimiter::direct_with_clock(quota, clock))
+            }),
+        };
+
+        // In the open model a dispatcher releases iterations on an absolute schedule and
+        // workers take them from this queue. One slot per worker is the slack allowed
+        // before an iteration counts as dropped.
+        //
+        // The dispatcher reads the same logical clock the runner does, and that clock
+        // stays paused until the last worker finishes setup and warmup, so the schedule
+        // starts with the bench phase without needing to be told.
+        let jobs_rx: Option<Arc<tokio::sync::Mutex<mpsc::Receiver<u64>>>> = match open_loop {
+            false => None,
+            true => {
+                #[cfg(not(feature = "rate_limit"))]
+                return Err(ConfigError::RateLimitFeatureDisabled.into());
+
+                #[cfg(feature = "rate_limit")]
+                {
+                    let rate = self.opts.rate.ok_or(ConfigError::OpenLoadModelNeedsRate)?;
+                    let (tx, rx) = mpsc::channel::<u64>(workers as usize);
+                    tokio::spawn(schedule::dispatch(
+                        self.opts.clock.clone(),
+                        f64::from(rate.get()),
+                        self.opts.duration,
+                        iters,
+                        tx,
+                        Arc::clone(&self.counters),
+                        self.cancel.clone(),
+                    ));
+                    Some(Arc::new(tokio::sync::Mutex::new(rx)))
+                }
+            }
+        };
 
         // Global sequence counter for warmup phase
         let warmup_seq = Arc::new(AtomicU64::new(0));
@@ -275,6 +342,7 @@ where
             #[cfg(feature = "rate_limit")]
             let buckets = buckets.clone();
             let mut b = self.clone();
+            let jobs = jobs_rx.clone();
             let warmup_seq = warmup_seq.clone();
             let warmup_completed = warmup_completed.clone();
             let setup_completed = setup_completed.clone();
@@ -341,19 +409,40 @@ where
 
                 // Run main benchmark iterations
                 loop {
-                    info.runner_seq = b.seq.fetch_add(1, Ordering::Relaxed);
-                    if let Some(iterations) = iters
-                        && info.runner_seq >= iterations
-                    {
-                        break;
-                    }
+                    match &jobs {
+                        // Open model: the schedule decides when an iteration starts, and
+                        // it stops handing them out when the run is over.
+                        Some(jobs) => {
+                            // Whichever worker is free takes the next iteration; a worker
+                            // waiting here is by definition free, so the handoff is
+                            // immediate and the queue only fills when all of them are busy.
+                            select! {
+                                biased;
+                                _ = cancel.cancelled() => break,
+                                job = async { jobs.lock().await.recv().await } => match job {
+                                    Some(seq) => info.runner_seq = seq,
+                                    None => break,
+                                },
+                            }
+                        }
 
-                    #[cfg(feature = "rate_limit")]
-                    if let Some(buckets) = &buckets {
-                        select! {
-                            biased;
-                            _ = cancel.cancelled() => break,
-                            _ = buckets.until_ready() => (),
+                        // Closed model: a free worker takes the next iteration itself.
+                        None => {
+                            info.runner_seq = b.seq.fetch_add(1, Ordering::Relaxed);
+                            if let Some(iterations) = iters
+                                && info.runner_seq >= iterations
+                            {
+                                break;
+                            }
+
+                            #[cfg(feature = "rate_limit")]
+                            if let Some(buckets) = &buckets {
+                                select! {
+                                    biased;
+                                    _ = cancel.cancelled() => break,
+                                    _ = buckets.until_ready() => (),
+                                }
+                            }
                         }
                     }
 
@@ -422,6 +511,101 @@ mod tests {
         BenchOpts, BenchPhase, BenchResult, BenchSuite, IterInfo, PauseControl,
         StatelessBenchSuite, Status,
     };
+
+    /// A target with a hard ceiling: 8 concurrent slots, 100ms each, so 80/s and no more.
+    #[derive(Clone)]
+    struct Saturating {
+        capacity: Arc<tokio::sync::Semaphore>,
+    }
+
+    impl StatelessBenchSuite for Saturating {
+        async fn bench(&mut self, _: &IterInfo) -> BenchResult<IterReport> {
+            let t = Instant::now();
+            let _permit = self.capacity.acquire().await.expect("semaphore");
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            Ok(IterReport { duration: t.elapsed(), status: Status::success(0), bytes: 0, items: 1 })
+        }
+    }
+
+    /// Run the saturating suite for 20s at 200/s and report (served, offered, dropped).
+    async fn run_saturating(load_model: crate::LoadModel) -> (u64, u64, u64) {
+        let (res_tx, mut res_rx) = mpsc::unbounded();
+        let pause = Arc::new(PauseControl::new());
+        let (phase_tx, _phase_rx) = watch::channel(BenchPhase::default());
+        let cancel = CancellationToken::new();
+        let counters: Arc<crate::ScheduleCounters> = Arc::default();
+
+        let opts = BenchOpts::builder()
+            .clock(Clock::new_paused())
+            .concurrency(64)
+            .duration(Duration::from_secs(20))
+            .rate(200)
+            .load_model(load_model)
+            .build()
+            .unwrap();
+
+        let suite = Saturating { capacity: Arc::new(tokio::sync::Semaphore::new(8)) };
+        let runner = Runner::new(
+            suite,
+            opts,
+            MpscObserver::from(res_tx),
+            pause,
+            cancel,
+            phase_tx,
+            Arc::clone(&counters),
+        );
+        let served = tokio::spawn(async move {
+            let mut n = 0u64;
+            while res_rx.recv().await.is_ok() {
+                n += 1;
+            }
+            n
+        });
+
+        runner.run().await.unwrap();
+        let served = served.await.unwrap();
+        (served, counters.offered(), counters.dropped())
+    }
+
+    /// The point of the open model: a target that cannot keep up produces a counted
+    /// shortfall, not a lower rate that looks like the target is fine.
+    #[tokio::test(start_paused = true)]
+    async fn open_load_model_reports_the_shortfall() {
+        let (served, offered, dropped) = run_saturating(crate::LoadModel::Open).await;
+
+        // 200/s for 20s asked for; 8 permits x 100ms can serve 80/s of it.
+        assert_eq!(offered, 4000, "the schedule must not bend to the target");
+        assert!((1500..=1700).contains(&served), "served {served}, expected ~1600");
+        assert!(dropped >= 2000, "the shortfall must be counted, got {dropped}");
+        // The difference is what was queued or in flight when the run ended.
+        assert!(
+            served + dropped <= offered,
+            "served {served} + dropped {dropped} > offered {offered}"
+        );
+        assert!(offered - served - dropped <= 128, "too much unaccounted work");
+    }
+
+    /// The closed model absorbs the same shortfall silently: there is no schedule, so
+    /// nothing is offered and nothing can be dropped — the rate simply comes out lower.
+    ///
+    /// Only the counters are asserted here. `governor` waits on its own timer rather than
+    /// tokio's, so under a paused clock the iteration count in the closed model says
+    /// nothing about how fast the target was; `examples/open_loop.rs` shows both models
+    /// against the same target in real time.
+    #[tokio::test(start_paused = true)]
+    async fn closed_load_model_absorbs_the_shortfall() {
+        let (served, offered, dropped) = run_saturating(crate::LoadModel::Closed).await;
+
+        assert!(served > 0, "the closed model must still run iterations");
+        assert_eq!(offered, 0, "the closed model has no schedule to report");
+        assert_eq!(dropped, 0);
+    }
+
+    #[test]
+    fn open_load_model_without_a_rate_is_rejected() {
+        let err = BenchOpts::builder().load_model(crate::LoadModel::Open).build().unwrap_err();
+        assert!(err.to_string().contains("needs a rate"), "got {err}");
+    }
 
     #[test]
     fn test_bench_opts_default_values() {
@@ -520,7 +704,7 @@ mod tests {
                 .build()
                 .unwrap();
 
-            let runner = Runner::new(EmptyBench, opts, MpscObserver::from(res_tx), pause, cancel, phase_tx);
+            let runner = Runner::new(EmptyBench, opts, MpscObserver::from(res_tx), pause, cancel, phase_tx, Arc::default());
 
             let t0 = Instant::now();
             runner.run().await.unwrap();
@@ -621,8 +805,15 @@ mod tests {
             .warmups(warmups)
             .build()?;
 
-        let runner =
-            Runner::new(suite.clone(), opts, MpscObserver::from(res_tx), pause, cancel, phase_tx);
+        let runner = Runner::new(
+            suite.clone(),
+            opts,
+            MpscObserver::from(res_tx),
+            pause,
+            cancel,
+            phase_tx,
+            Arc::default(),
+        );
         let drain = tokio::spawn(async move { while res_rx.recv().await.is_ok() {} });
 
         runner.run().await?;
@@ -701,8 +892,15 @@ mod tests {
             .build()
             .unwrap();
 
-        let runner =
-            Runner::new(suite.clone(), opts, MpscObserver::from(res_tx), pause, cancel, phase_tx);
+        let runner = Runner::new(
+            suite.clone(),
+            opts,
+            MpscObserver::from(res_tx),
+            pause,
+            cancel,
+            phase_tx,
+            Arc::default(),
+        );
         let drain = tokio::spawn(async move { while res_rx.recv().await.is_ok() {} });
 
         runner.run().await.unwrap();
@@ -769,8 +967,15 @@ mod tests {
             .build()
             .unwrap();
 
-        let runner =
-            Runner::new(suite, opts, MpscObserver::from(res_tx), pause.clone(), cancel, phase_tx);
+        let runner = Runner::new(
+            suite,
+            opts,
+            MpscObserver::from(res_tx),
+            pause.clone(),
+            cancel,
+            phase_tx,
+            Arc::default(),
+        );
         let drain = tokio::spawn(async move { while res_rx.recv().await.is_ok() {} });
         let handle = tokio::spawn(async move { runner.run().await });
 

@@ -112,6 +112,7 @@ All benchmarks built with rlt include these CLI options:
 | `--duration` | `-d` | Stop after duration (e.g., `10s`, `5m`, `1h`) |
 | `--warmup` | `-w` | Warmup iterations (excluded from results) |
 | `--rate` | `-r` | Rate limit in iterations per second |
+| `--load-model` | | `closed` (default) or `open` — see [Load models](#load-models) |
 | `--quiet` | `-q` | Quiet mode (implies `--collector silent`) |
 
 #### Output Options
@@ -162,6 +163,38 @@ rlt = { version = "0.3", default-features = false }
 | `warmup` | Warmup phase demo | `cargo run --example warmup -- -w 10 -n 50` |
 | `baseline` | Baseline comparison demo | `cargo run --example baseline -- -c 4 -d 5s --save-baseline v0` |
 | `logging` | Tracing integration | `cargo run --example logging -- -c 2 -d 5s` |
+| `open_loop` | Both load models against one saturated target | `cargo run --release --example open_loop` |
+| `multi_phase` | Two `BenchSession` phases sharing state | `cargo run --example multi_phase` |
+
+### Load models
+
+`--load-model` decides who sets the pace.
+
+In the **closed** model (the default, and rlt's original behaviour) each worker starts its
+next iteration when the previous one returns, and `--rate` only caps how fast a *free*
+worker may start again. When the target slows down, fewer iterations start and the
+benchmark settles at whatever the target can serve.
+
+In the **open** model `--rate` is a schedule rather than a cap. A dispatcher releases
+iterations when they come due — `elapsed x rate`, derived from the clock so a late tick
+cannot accumulate drift — and an iteration that finds no free worker is **dropped and
+counted** instead of delayed. The report gains `Offered` and `Dropped` rows, and the JSON
+output a `summary.schedule` object.
+
+The difference is what an overloaded target looks like. Against a target that can serve
+80/s while 200/s is requested (`cargo run --release --example open_loop`):
+
+```text
+Closed: served 785 (78/s), offered 0,    dropped 0
+Open:   served 784 (78/s), offered 2001, dropped 1089
+```
+
+Both served the same work. Only the open model reports that more than half of what was
+asked for never happened — which is the difference between "the target is running at
+78/s" and "the target is saturated at 78/s".
+
+The open model requires `--rate` and the `rate_limit` feature. Warm-up iterations are not
+scheduled; they run closed-loop in both models.
 
 ### Baseline Comparison
 

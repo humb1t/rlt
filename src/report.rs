@@ -36,6 +36,17 @@ pub struct BenchReport {
     pub error_dist: HashMap<String, u64>,
     /// The total elapsed time of the benchmark.
     pub elapsed: Duration,
+
+    /// Iterations the schedule called for, in the [open](crate::LoadModel::Open) model.
+    ///
+    /// Zero in the closed model, where the workers set the pace and nothing can be
+    /// asked for that is not also started.
+    pub offered: u64,
+
+    /// Iterations the schedule called for that no worker was free to take.
+    ///
+    /// The shortfall against the requested rate. Zero in the closed model.
+    pub dropped: u64,
 }
 
 impl From<BenchOpts> for BenchReport {
@@ -47,6 +58,8 @@ impl From<BenchOpts> for BenchReport {
             status_dist: HashMap::default(),
             error_dist: HashMap::default(),
             elapsed: Duration::ZERO,
+            offered: 0,
+            dropped: 0,
         }
     }
 }
