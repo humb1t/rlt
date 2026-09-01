@@ -6,7 +6,7 @@
 //! # Available Reporters
 //!
 //! - [`TextReporter`] - Human-readable colored text output with tables and histograms.
-//!   Ideal for terminal viewing.
+//!   Ideal for terminal viewing. Requires the `text` feature.
 //! - [`JsonReporter`] - Machine-readable JSON output with all statistics.
 //!   Ideal for CI/CD integration, data analysis, or piping to other tools.
 //! - [`BencherReporter`] - libtest bencher lines for
@@ -22,6 +22,7 @@
 //! # Example
 //!
 //! ```ignore
+//! # // Requires the `text` feature.
 //! use rlt::reporter::{BenchReporter, TextReporter};
 //!
 //! let reporter = TextReporter;
@@ -32,11 +33,13 @@
 mod bencher;
 mod json;
 mod run;
+#[cfg(feature = "text")]
 mod text;
 
 pub use bencher::BencherReporter;
 pub use json::JsonReporter;
 pub use run::{BencherRunReporter, JsonRunReporter, RunReporter};
+#[cfg(feature = "text")]
 pub use text::TextReporter;
 
 use crate::baseline::Comparison;

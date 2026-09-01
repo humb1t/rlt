@@ -28,11 +28,13 @@ use std::time::Duration;
 /// let formatted = FormattedDuration::from(d, TimeUnit::Micro);
 /// println!("{:.2}", formatted);  // "1234.00µs"
 /// ```
+#[cfg(feature = "text")]
 pub struct FormattedDuration {
     duration: Duration,
     unit: TimeUnit,
 }
 
+#[cfg(feature = "text")]
 impl FormattedDuration {
     /// Creates a new formatted duration with the specified display unit.
     pub fn from(duration: Duration, unit: TimeUnit) -> Self {
@@ -75,6 +77,7 @@ impl std::fmt::Display for TimeUnit {
     }
 }
 
+#[cfg(feature = "text")]
 impl std::fmt::Display for FormattedDuration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.duration.as_f64(self.unit).fmt(f).and_then(|_| write!(f, "{unit}", unit = self.unit,))

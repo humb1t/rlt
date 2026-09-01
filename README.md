@@ -143,6 +143,7 @@ All benchmarks built with rlt include these CLI options:
 | Feature | Default | Description |
 |---------|---------|-------------|
 | `tui` | Yes | Real-time terminal UI via [ratatui](https://crates.io/crates/ratatui). Off, runs are headless and reported through the text, JSON or bencher reporters |
+| `text` | Yes | The plain-text report, rendered with [tabled](https://crates.io/crates/tabled). Off, the crate reports through the JSON or bencher reporters only, and the table stack leaves the dependency tree |
 | `tracing` | Yes | Logging support via [tui-logger](https://crates.io/crates/tui-logger) (implies `tui`) |
 | `rate_limit` | Yes | Rate limiting via [governor](https://crates.io/crates/governor) |
 | `http` | Yes | HTTP status code conversion |

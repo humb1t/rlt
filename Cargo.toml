@@ -20,18 +20,24 @@ name = "rlt"
 path = "src/lib.rs"
 
 [features]
-default = ["tui", "tracing", "rate_limit", "http"]
+default = ["tui", "tracing", "rate_limit", "http", "text"]
 # The interactive terminal UI. Off, the crate builds without ratatui and reports
 # through the text/json/bencher reporters only, which is what a library consumer
 # driving BenchSession itself needs.
-tui = ["dep:ratatui"]
+tui = ["dep:ratatui", "dep:byte-unit"]
+# The plain-text report. Off, the crate builds without tabled and its
+# proc-macro stack, and reports through the json/bencher reporters only, which
+# is what a library consumer assembling its own document needs. byte-unit is
+# shared with the TUI: both render human-readable byte counts, and nothing else
+# does.
+text = ["dep:tabled", "dep:byte-unit"]
 tracing = ["tui", "dep:log", "dep:tracing", "dep:tui-logger"]
 rate_limit = ["dep:governor"]
 http = ["dep:http"]
 
 [dependencies]
 anyhow = "1"
-byte-unit = "5.1"
+byte-unit = { version = "5.1", optional = true }
 clap = { version = "4.5", features = ["derive"] }
 crossterm = "0.29"
 humantime = "2.1"
@@ -44,7 +50,7 @@ ratatui = { version = "0.30", features = [
 ], default-features = false, optional = true }
 hdrhistogram = "7.5"
 itertools = "0.14"
-tabled = { version = "0.20", features = ["ansi"] }
+tabled = { version = "0.20", features = ["ansi"], optional = true }
 cfg-if = "1"
 parking_lot = "0.12"
 nonzero_ext = "0.3"
