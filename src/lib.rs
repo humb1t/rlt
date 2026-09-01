@@ -9,6 +9,7 @@
 //! - **Flexible**: Customize the work load with your own logic.
 //! - **Easy to use**: Little boilerplate code, just focus on testing.
 //! - **Rich Statistics**: Collect and display rich statistics.
+//! - **Multi-phase runs**: Record several sessions as one report, see [`run`].
 //! - **High performance**: Optimized for performance and resource usage.
 //! - **Real-time TUI**: Monitor testing progress with a powerful real-time TUI.
 //!
@@ -66,6 +67,7 @@ pub mod baseline;
 pub mod cli;
 pub mod observer;
 pub mod reporter;
+pub mod run;
 pub mod runner;
 pub mod session;
 pub mod suite;
@@ -79,6 +81,7 @@ pub use crate::error::{BenchError, BenchResult, Error, Result};
 pub use crate::histogram::{LatencyHistogram, LatencyStats};
 pub use crate::phase::{BenchPhase, PauseControl, RunState};
 pub use crate::report::{BenchReport, IterReport};
+pub use crate::run::{PhaseReport, RunReport};
 pub use crate::runner::{BenchOpts, BenchOptsBuilder, IterInfo};
 pub use crate::schedule::{LoadModel, Pacing, ScheduleCounters};
 pub use crate::stats::{Counter, IterStats};

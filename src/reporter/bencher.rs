@@ -24,6 +24,7 @@ use std::io::Write;
 
 use super::{BenchReporter, ReporterResult};
 use crate::baseline::Comparison;
+use crate::histogram::LatencyStats;
 use crate::report::BenchReport;
 use crate::schedule::Pacing;
 
@@ -59,6 +60,42 @@ impl BencherReporter {
         writeln!(w, "test {name} ... bench: {:.0} ns/iter (+/- {:.0})", ns, variance)?;
         Ok(())
     }
+
+    /// Write the metric lines for a distribution that has already been reduced.
+    ///
+    /// The entry point for callers holding a [`LatencyStats`] rather than a whole
+    /// [`BenchReport`] — a phase of a [`RunReport`](crate::RunReport), typically.
+    /// `iters` and `elapsed_secs` are only used for the throughput line, and only when
+    /// `pacing` says it is a result.
+    ///
+    /// An empty distribution renders nothing, so a phase that recorded no latency
+    /// contributes no metrics rather than a row of zeroes.
+    pub fn print_stats(
+        &self,
+        w: &mut dyn Write,
+        latency: &LatencyStats,
+        pacing: Pacing,
+        iters: u64,
+        elapsed_secs: f64,
+    ) -> ReporterResult<()> {
+        if latency.count == 0 {
+            return Ok(());
+        }
+
+        let ns = |v: u64| v as f64;
+        self.line(w, "latency/mean", ns(latency.mean), ns(latency.stdev))?;
+        self.line(w, "latency/p50", ns(latency.p50), 0.0)?;
+        self.line(w, "latency/p90", ns(latency.p90), 0.0)?;
+        self.line(w, "latency/p99", ns(latency.p99), 0.0)?;
+        self.line(w, "latency/max", ns(latency.max), 0.0)?;
+
+        // See "The pacing guard" above: a rate the target did not set is not a result.
+        if pacing == Pacing::Platform && iters > 0 && elapsed_secs > 0.0 {
+            self.line(w, "throughput", elapsed_secs / iters as f64 * 1e9, 0.0)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl BenchReporter for BencherReporter {
@@ -68,26 +105,13 @@ impl BenchReporter for BencherReporter {
         report: &BenchReport,
         _comparison: Option<&Comparison>,
     ) -> ReporterResult<()> {
-        if report.hist.is_empty() {
-            return Ok(());
-        }
-
-        let ns = |d: std::time::Duration| d.as_secs_f64() * 1e9;
-
-        self.line(w, "latency/mean", ns(report.hist.mean()), ns(report.hist.stdev()))?;
-        self.line(w, "latency/p50", ns(report.hist.median()), 0.0)?;
-        self.line(w, "latency/p90", ns(report.hist.value_at_quantile(0.90)), 0.0)?;
-        self.line(w, "latency/p99", ns(report.hist.value_at_quantile(0.99)), 0.0)?;
-        self.line(w, "latency/max", ns(report.hist.max()), 0.0)?;
-
-        // See "The pacing guard" above: a rate the target did not set is not a result.
-        let elapsed = report.elapsed.as_secs_f64();
-        let iters = report.stats.overall.iters;
-        if report.pacing == Pacing::Platform && iters > 0 && elapsed > 0.0 {
-            self.line(w, "throughput", elapsed / iters as f64 * 1e9, 0.0)?;
-        }
-
-        Ok(())
+        self.print_stats(
+            w,
+            &LatencyStats::from(&report.hist),
+            report.pacing,
+            report.stats.overall.iters,
+            report.elapsed.as_secs_f64(),
+        )
     }
 }
 
