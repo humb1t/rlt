@@ -85,8 +85,9 @@ pub(crate) struct MpscObserver(mpsc::UnboundedSender<Result<IterReport, String>>
 impl Observer for MpscObserver {
     async fn notify(&self, result: Result<&IterReport, &BenchError>) {
         let result = result.cloned().map_err(ToString::to_string);
-        if let Err(error) = self.0.unbounded_send(result) {
-            log::warn!("Failed to send IterReport; error={error}");
+        if let Err(_error) = self.0.unbounded_send(result) {
+            #[cfg(feature = "tracing")]
+            log::warn!("Failed to send IterReport; error={_error}");
         }
     }
 }

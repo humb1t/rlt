@@ -12,11 +12,14 @@
 //! - [`RecentStatsWindow`] - Provides rate calculations over sliding windows.
 
 mod counter;
+#[cfg(feature = "tui")]
 mod window;
 
 use std::collections::HashMap;
 
 pub use counter::Counter;
+// The rolling windows exist to drive the live TUI charts; nothing else reads them.
+#[cfg(feature = "tui")]
 pub use window::{MultiScaleStatsWindow, RecentStatsWindow};
 
 use crate::report::IterReport;

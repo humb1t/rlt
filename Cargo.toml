@@ -20,8 +20,12 @@ name = "rlt"
 path = "src/lib.rs"
 
 [features]
-default = ["tracing", "rate_limit", "http"]
-tracing = ["dep:log", "dep:tracing", "dep:tui-logger"]
+default = ["tui", "tracing", "rate_limit", "http"]
+# The interactive terminal UI. Off, the crate builds without ratatui and reports
+# through the text/json/bencher reporters only, which is what a library consumer
+# driving BenchSession itself needs.
+tui = ["dep:ratatui"]
+tracing = ["tui", "dep:log", "dep:tracing", "dep:tui-logger"]
 rate_limit = ["dep:governor"]
 http = ["dep:http"]
 
@@ -37,7 +41,7 @@ tokio = { version = "1.36", features = ["rt", "time", "signal", "macros"] }
 tokio-util = "0.7"
 ratatui = { version = "0.30", features = [
     "crossterm",
-], default-features = false }
+], default-features = false, optional = true }
 hdrhistogram = "7.5"
 itertools = "0.14"
 tabled = { version = "0.20", features = ["ansi"] }

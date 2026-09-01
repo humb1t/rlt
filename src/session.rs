@@ -13,6 +13,7 @@ use crate::aggregator::Aggregator;
 use crate::observer::{Layered, MpscObserver, Observer, ObserverExt};
 use crate::runner::Runner;
 use crate::schedule::ScheduleCounters;
+#[cfg(feature = "tui")]
 use crate::tui::{Tui, TuiSettings};
 use crate::{BenchOpts, BenchPhase, BenchReport, BenchSuite, PauseControl};
 
@@ -22,6 +23,7 @@ pub struct BenchSession<B, O> {
     suite: B,
     observer: O,
     opts: BenchOpts,
+    #[cfg(feature = "tui")]
     tui_settings: Option<TuiSettings>,
 }
 
@@ -32,7 +34,13 @@ where
     /// Create a new [`BenchSession`] without any custom [`Observer`]s with default [`BenchOpts`]
     /// and disabled TUI interface
     pub fn new(suite: B) -> Self {
-        Self { suite, observer: (), opts: BenchOpts::default(), tui_settings: None }
+        Self {
+            suite,
+            observer: (),
+            opts: BenchOpts::default(),
+            #[cfg(feature = "tui")]
+            tui_settings: None,
+        }
     }
 
     /// Add an [`Observer`] to the session to get notified for results of each iteration
@@ -41,6 +49,7 @@ where
             suite: self.suite,
             observer,
             opts: self.opts,
+            #[cfg(feature = "tui")]
             tui_settings: self.tui_settings,
         }
     }
@@ -54,12 +63,14 @@ impl<B, O> BenchSession<B, O> {
     }
 
     /// Enabled TUI with custom settings
+    #[cfg(feature = "tui")]
     pub fn with_tui(mut self, tui_settings: TuiSettings) -> Self {
         self.tui_settings = Some(tui_settings);
         self
     }
 
     /// Enabled the TUI with default settings
+    #[cfg(feature = "tui")]
     pub fn enable_tui(self) -> Self {
         self.with_tui(TuiSettings::default())
     }
@@ -78,6 +89,7 @@ where
             suite: self.suite,
             observer: self.observer.with(outer),
             opts: self.opts,
+            #[cfg(feature = "tui")]
             tui_settings: self.tui_settings,
         }
     }
@@ -90,7 +102,10 @@ where
 {
     /// Run the benchmark and get the [`BenchReport`] or [BenchError](crate::BenchError)
     pub async fn run(self) -> crate::Result<BenchReport> {
+        #[cfg(feature = "tui")]
         let Self { suite, observer, opts, tui_settings } = self;
+        #[cfg(not(feature = "tui"))]
+        let Self { suite, observer, opts } = self;
 
         // Now run the benchmark
         let pause = Arc::new(PauseControl::new());
@@ -108,23 +123,38 @@ where
         );
         let observer = observer.with(MpscObserver::from(res_tx));
 
-        let (observer, tui) = if let Some(tui_settings) = tui_settings {
-            let (res_tx, res_rx) = mpsc::unbounded();
-            let tui = Tui::new(
-                opts.clone(),
-                tui_settings.fps,
-                res_rx,
-                Arc::clone(&pause),
-                cancel.clone(),
-                tui_settings.auto_quit,
-                phase_rx,
-            )?;
-            let tui_observer = Some(MpscObserver::from(res_tx));
-            let tui_fut = tui.run();
-            (observer.with(tui_observer), tokio::spawn(tui_fut))
-        } else {
+        // With the tui feature off there is no interactive collector to feed, so the
+        // session always runs headless and the phase channel has no reader.
+        #[cfg(not(feature = "tui"))]
+        let (observer, tui) = {
             drop(phase_rx);
-            (observer.with(None), tokio::spawn(async move { Ok(()) }))
+            let no_tui_observer: Option<MpscObserver> = None;
+            (
+                observer.with(no_tui_observer),
+                tokio::spawn(async move { Ok::<(), crate::Error>(()) }),
+            )
+        };
+
+        #[cfg(feature = "tui")]
+        let (observer, tui) = match tui_settings {
+            Some(tui_settings) => {
+                let (res_tx, res_rx) = mpsc::unbounded();
+                let tui = Tui::new(
+                    opts.clone(),
+                    tui_settings.fps,
+                    res_rx,
+                    Arc::clone(&pause),
+                    cancel.clone(),
+                    tui_settings.auto_quit,
+                    phase_rx,
+                )?;
+                let tui_observer = Some(MpscObserver::from(res_tx));
+                (observer.with(tui_observer), tokio::spawn(tui.run()))
+            }
+            None => {
+                drop(phase_rx);
+                (observer.with(None), tokio::spawn(async move { Ok(()) }))
+            }
         };
 
         let runner = Runner::new(suite, opts, observer, pause, cancel, phase_tx, counters);

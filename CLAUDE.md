@@ -59,8 +59,9 @@ cargo clippy                     # Run linter
 
 ## Cargo Features
 
-- `default = ["tracing", "rate_limit", "http"]`
-- `tracing` - Logging via tui-logger
+- `default = ["tui", "tracing", "rate_limit", "http"]`
+- `tui` - Real-time terminal UI (ratatui); off, the crate builds headless
+- `tracing` - Logging via tui-logger (implies `tui`)
 - `rate_limit` - Rate limiting via governor crate
 - `http` - HTTP status code conversion
 
