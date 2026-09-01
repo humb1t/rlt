@@ -22,9 +22,23 @@ cherry-pickable for an upstream pull request.
 | 2 | `feat/load-model-open` | `--load-model open\|closed`: absolute-schedule dispatcher with `offered`/`dropped` counters | [#2](https://github.com/humb1t/rlt/pull/2) | not offered — the reason this fork exists |
 | 3 | `feat/bencher-reporter` | `-o bencher` output for `benchmark-action/github-action-benchmark`, with an open-loop throughput guard | [#3](https://github.com/humb1t/rlt/pull/3) | answers upstream [issue #18](https://github.com/wfxr/rlt/issues/18); to be offered |
 | 4 | `feat/tui-feature-gate` | `tui` feature so the interactive stack can be compiled out (197 → 119 crates) | [#4](https://github.com/humb1t/rlt/pull/4) | to be offered |
+| 5 | `feat/pacing` | `Pacing` on `BenchOpts`/`BenchReport`: declare what set the rate instead of inferring it from `offered > 0` | [#5](https://github.com/humb1t/rlt/pull/5) | to be offered |
+| 6 | `feat/public-stats` | public `histogram` / `stats` modules and a canonical `LatencyStats`, so a consumer can name the types its report is made of | [#6](https://github.com/humb1t/rlt/pull/6) | to be offered |
+| 7 | `feat/throughput-observer` | `observer::Throughput`: a per-second series without the TUI, measured against the session `Clock` | [#7](https://github.com/humb1t/rlt/pull/7) | to be offered |
+| 8 | `feat/run-report` | `run::RunReport<M>` plus JSON and bencher run reporters: several sessions recorded as one document | [#8](https://github.com/humb1t/rlt/pull/8) | not offered — see below |
 
-Patches 3 and 4 are self-contained and worth sending upstream; 2 is not, and 1 is
-already an open upstream PR.
+Patches 3, 4, 5, 6 and 7 are self-contained and worth sending upstream; 2 is not,
+and 1 is already an open upstream PR.
+
+Patch 8 is fork-only by decision, not by neglect. A multi-session run concept is
+a large ask for a tool whose shape is one invocation, one `BenchCli`, one
+session; upstream would have to commit to a public API it has no use for.
+Patches 5–7 are the ones that would help any consumer.
+
+Patches 5–8 all came out of the first real consumer
+([`fleet-load`](https://github.com/exein-io/runtime-platform/tree/main/fleet-load)).
+Each closes a seam that only opens when rlt is driven as a library rather than as
+a CLI — which is what patch 1 made possible and what nothing upstream exercises.
 
 Patches are offered to `wfxr/rlt` opportunistically. Nothing here is ever blocked
 on upstream review.
@@ -33,10 +47,10 @@ on upstream review.
 
 - **`main` is never force-pushed.** The mirror syncs by merge; a rebase of `main`
   breaks every future sync.
-- Tags are `exein-v<upstream version>.<n>` (e.g. `exein-v0.5.1`), deliberately not
+- Tags are `exein-v<upstream version>.<n>` (e.g. `exein-v0.5.2`), deliberately not
   matching upstream's `v*.*.*` release trigger.
 - The crate keeps upstream's name and version. Consumers pin a tag:
-  `rlt = { git = "https://github.com/exein-io/rlt", tag = "exein-v0.5.1" }`.
+  `rlt = { git = "https://github.com/exein-io/rlt", tag = "exein-v0.5.2" }`.
 
 ## Syncing the mirror
 
