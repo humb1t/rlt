@@ -54,7 +54,7 @@ where
     I: Observer,
 {
     fn notify(&self, result: Result<&IterReport, &BenchError>) -> impl Future<Output = ()> + Send {
-        let current = self.current.notify(result.clone());
+        let current = self.current.notify(result);
         let inner = self.inner.notify(result);
         async move {
             current.await;
@@ -84,7 +84,7 @@ pub(crate) struct MpscObserver(mpsc::UnboundedSender<Result<IterReport, String>>
 
 impl Observer for MpscObserver {
     async fn notify(&self, result: Result<&IterReport, &BenchError>) {
-        let result = result.map(Clone::clone).map_err(ToString::to_string);
+        let result = result.cloned().map_err(ToString::to_string);
         if let Err(error) = self.0.unbounded_send(result) {
             log::warn!("Failed to send IterReport; error={error}");
         }
