@@ -53,14 +53,14 @@ mod aggregator;
 pub mod clock;
 mod duration;
 pub mod error;
-mod histogram;
+pub mod histogram;
 mod phase;
 mod report;
 pub mod schedule;
 mod status;
 mod util;
 
-pub(crate) mod stats;
+pub mod stats;
 
 pub mod baseline;
 pub mod cli;
@@ -76,9 +76,11 @@ pub mod tui;
 pub use tui_logger::TuiTracingSubscriberLayer;
 
 pub use crate::error::{BenchError, BenchResult, Error, Result};
+pub use crate::histogram::{LatencyHistogram, LatencyStats};
 pub use crate::phase::{BenchPhase, PauseControl, RunState};
 pub use crate::report::{BenchReport, IterReport};
 pub use crate::runner::{BenchOpts, BenchOptsBuilder, IterInfo};
 pub use crate::schedule::{LoadModel, Pacing, ScheduleCounters};
+pub use crate::stats::{Counter, IterStats};
 pub use crate::status::{Status, StatusKind};
 pub use crate::suite::{BenchSuite, StatelessBenchSuite};
