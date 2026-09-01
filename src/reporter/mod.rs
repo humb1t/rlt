@@ -31,10 +31,12 @@
 
 mod bencher;
 mod json;
+mod run;
 mod text;
 
 pub use bencher::BencherReporter;
 pub use json::JsonReporter;
+pub use run::{BencherRunReporter, JsonRunReporter, RunReporter};
 pub use text::TextReporter;
 
 use crate::baseline::Comparison;
