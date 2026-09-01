@@ -16,12 +16,15 @@ The full evaluation, including why k6, goose and balter were rejected, is in
 Every patch is developed on its own branch so it stays individually
 cherry-pickable for an upstream pull request.
 
-| # | Branch | What it does | Upstream status |
-|---|---|---|---|
-| 1 | `feat/bench-session` | `BenchSession`: a public runner entry returning the report in-process, enabling sequential multi-phase runs | cherry-pick of upstream [PR #104](https://github.com/wfxr/rlt/pull/104) (open) |
-| 2 | `feat/load-model-open` | `--load-model open\|closed`: absolute-schedule dispatcher with `offered`/`dropped` counters | not offered — the reason this fork exists |
-| 3 | `feat/bencher-reporter` | `-o bencher` output for `benchmark-action/github-action-benchmark`, with an open-loop throughput guard | closes upstream [issue #18](https://github.com/wfxr/rlt/issues/18) if accepted |
-| 4 | `feat/tui-feature-gate` | `tui` feature so the interactive stack can be compiled out | to be offered |
+| # | Branch | What it does | Landed | Upstream status |
+|---|---|---|---|---|
+| 1 | `feat/bench-session` | `BenchSession`: a public runner entry returning the report in-process, enabling sequential multi-phase runs | [#1](https://github.com/humb1t/rlt/pull/1) | cherry-pick of upstream [PR #104](https://github.com/wfxr/rlt/pull/104), still open there |
+| 2 | `feat/load-model-open` | `--load-model open\|closed`: absolute-schedule dispatcher with `offered`/`dropped` counters | [#2](https://github.com/humb1t/rlt/pull/2) | not offered — the reason this fork exists |
+| 3 | `feat/bencher-reporter` | `-o bencher` output for `benchmark-action/github-action-benchmark`, with an open-loop throughput guard | [#3](https://github.com/humb1t/rlt/pull/3) | answers upstream [issue #18](https://github.com/wfxr/rlt/issues/18); to be offered |
+| 4 | `feat/tui-feature-gate` | `tui` feature so the interactive stack can be compiled out (197 → 119 crates) | [#4](https://github.com/humb1t/rlt/pull/4) | to be offered |
+
+Patches 3 and 4 are self-contained and worth sending upstream; 2 is not, and 1 is
+already an open upstream PR.
 
 Patches are offered to `wfxr/rlt` opportunistically. Nothing here is ever blocked
 on upstream review.
