@@ -38,6 +38,22 @@ on upstream review.
 - The crate keeps upstream's name and version. Consumers pin a tag:
   `rlt = { git = "https://github.com/exein-io/rlt", tag = "exein-v0.5.1" }`.
 
+## Syncing the mirror
+
+`exein-io/rlt` carries a `sync-from-humb1t` workflow, but **its schedule is off and it
+cannot push**: `GITHUB_TOKEN` refuses refs that create or update files under
+`.github/workflows/`, which this repository's history does. Until that job gets a
+credential of its own — narrowest being a deploy key on the mirror — sync by hand from a
+clone with both remotes (`origin` = here, `mirror` = `exein-io/rlt`):
+
+```sh
+git switch mirror-main && git merge --no-ff origin/main
+git push mirror mirror-main:main && git push mirror --tags
+```
+
+`mirror-main` exists because the mirror's `main` is this repository's `main` plus that one
+workflow file. Never force-push either branch.
+
 ## Licensing
 
 Unchanged from upstream: `MIT OR Apache-2.0`, see `LICENSE` and `LICENSE-APACHE`.
