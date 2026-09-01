@@ -12,6 +12,7 @@ use tokio_util::sync::CancellationToken;
 use crate::aggregator::Aggregator;
 use crate::observer::{Layered, MpscObserver, Observer, ObserverExt};
 use crate::runner::Runner;
+use crate::schedule::ScheduleCounters;
 use crate::tui::{Tui, TuiSettings};
 use crate::{BenchOpts, BenchPhase, BenchReport, BenchSuite, PauseControl};
 
@@ -97,8 +98,14 @@ where
         let (phase_tx, phase_rx) =
             watch::channel(BenchPhase::Setup { completed: 0, total: opts.concurrency as usize });
 
+        // The schedule counts what it offered and what it had to drop; the aggregator
+        // reads those counts once the run is over.
+        let counters = Arc::new(ScheduleCounters::default());
+
         let (res_tx, res_rx) = mpsc::unbounded();
-        let aggregator = tokio::spawn(Aggregator::new(opts.clone(), res_rx, cancel.clone()).run());
+        let aggregator = tokio::spawn(
+            Aggregator::new(opts.clone(), res_rx, cancel.clone(), Arc::clone(&counters)).run(),
+        );
         let observer = observer.with(MpscObserver::from(res_tx));
 
         let (observer, tui) = if let Some(tui_settings) = tui_settings {
@@ -120,7 +127,7 @@ where
             (observer.with(None), tokio::spawn(async move { Ok(()) }))
         };
 
-        let runner = Runner::new(suite, opts, observer, pause, cancel, phase_tx);
+        let runner = Runner::new(suite, opts, observer, pause, cancel, phase_tx, counters);
         let (bench, tui, report) = futures::join!(runner.run(), tui, aggregator);
         bench?;
         tui??;

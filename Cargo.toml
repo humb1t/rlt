@@ -59,7 +59,8 @@ tui-logger = { version = "0.18", optional = true, features = [
 ] }
 
 [dev-dependencies]
-tokio = { version = "1.36", features = ["rt-multi-thread"] }
+# test-util drives the paused clock the open-loop schedule tests run on.
+tokio = { version = "1.36", features = ["rt-multi-thread", "test-util"] }
 bytes = "1.6"
 http-body-util = "0.1"
 hyper = { version = "1.2", features = ["client"] }

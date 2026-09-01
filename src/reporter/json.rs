@@ -67,6 +67,12 @@ impl BenchReporter for JsonReporter {
                 bytes_per_iter: overall.bytes.checked_div(overall.iters),
             },
 
+            schedule: (report.offered > 0).then(|| ScheduleSummary {
+                offered: report.offered,
+                dropped: report.dropped,
+                offered_rate: rate(report.offered, elapsed),
+            }),
+
             items: ItemsSummary {
                 total: overall.items,
                 rate: rate(overall.items, elapsed),
@@ -131,6 +137,17 @@ struct Summary {
     iters: ItersSummary,
     items: ItemsSummary,
     bytes: BytesSummary,
+
+    /// Present only in the open load model, where the schedule sets the pace.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    schedule: Option<ScheduleSummary>,
+}
+
+#[derive(Serialize)]
+struct ScheduleSummary {
+    offered: u64,
+    dropped: u64,
+    offered_rate: f64,
 }
 
 #[derive(Serialize)]

@@ -41,6 +41,7 @@ cargo clippy                     # Run linter
 
 - `cli.rs` - CLI parsing with `BenchCli` struct and `bench_cli!`/`bench_cli_run!` macros
 - `runner.rs` - `Runner` orchestrates workers, handles warmup, rate limiting, cancellation
+- `schedule.rs` - open-loop pacing: `LoadModel`, the absolute-schedule dispatcher and the offered/dropped counters
 - `collector/` - Real-time result collection: `TuiCollector`, `SilentCollector`
 - `reporter/` - Final report output: `TextReporter`, `JsonReporter`
 - `stats/` - Statistics tracking with rolling windows and counters

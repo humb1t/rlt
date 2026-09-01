@@ -70,6 +70,7 @@ use crate::clock::Clock;
 use crate::error::ReporterError;
 use crate::reporter::{BenchReporter, JsonReporter, TextReporter};
 use crate::runner::BenchOpts;
+use crate::schedule::LoadModel;
 use crate::session::BenchSession;
 use crate::tui::TuiSettings;
 
@@ -124,6 +125,15 @@ pub struct BenchCli {
     /// When set, benchmark will try to run at the specified rate.
     #[clap(long, short = 'r')]
     pub rate: Option<NonZeroU32>,
+
+    /// How iterations are paced: closed (workers set the pace) or open (the rate does)
+    ///
+    /// In the closed model a worker starts its next iteration when the previous one
+    /// returns, so a slow target simply lowers the reported rate. In the open model the
+    /// requested rate is a schedule: iterations start when they are due, and any that
+    /// find no free worker are reported as dropped rather than delayed. Requires --rate.
+    #[clap(long, value_enum, default_value_t = LoadModel::Closed, requires = "rate")]
+    pub load_model: LoadModel,
 
     /// Run benchmark in quiet mode
     ///
@@ -208,6 +218,7 @@ impl BenchCli {
             warmups: self.warmup,
             #[cfg(feature = "rate_limit")]
             rate: self.rate,
+            load_model: self.load_model,
         }
     }
 

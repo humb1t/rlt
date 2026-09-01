@@ -74,6 +74,9 @@ pub enum ConfigError {
     #[error("rate limiting requested but feature `rate_limit` is disabled")]
     RateLimitFeatureDisabled,
 
+    #[error("the open load model needs a rate to schedule against")]
+    OpenLoadModelNeedsRate,
+
     #[error("stats window periods must be non-empty")]
     WindowPeriodsEmpty,
 
