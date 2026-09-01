@@ -251,7 +251,11 @@ fn print_latency_percentiles(
     u: TimeUnit,
 ) -> ReporterResult<()> {
     let percentiles = hist.percentiles(PERCENTAGES).map(|(p, v)| {
-        vec![format!("{:.2}%", p), format!(" in "), format!("{:.2}", FormattedDuration::from(v, u))]
+        vec![
+            format!("{:.2}%", p),
+            " in ".to_owned(),
+            format!("{:.2}", FormattedDuration::from(v, u)),
+        ]
     });
     let mut percentiles = Builder::from_iter(percentiles).build();
     percentiles
