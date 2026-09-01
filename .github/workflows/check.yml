@@ -4,6 +4,7 @@
 # - clippy: checks that the code does not contain any clippy warnings
 # - doc: checks that the code can be documented without errors
 # - hack: check combinations of feature flags
+# - headless: lint and test the build without default features (no TUI)
 # - msrv: check that the msrv specified in the crate is correct
 permissions:
   contents: read
@@ -92,6 +93,24 @@ jobs:
       # --feature-powerset runs for every combination of features
       - name: cargo hack
         run: cargo hack --feature-powerset check
+  headless:
+    # The powerset above only checks that every combination compiles. A library consumer
+    # driving BenchSession itself builds without the interactive stack, so that
+    # configuration is held to the same warning and test standard as the default one.
+    runs-on: ubuntu-latest
+    name: ubuntu / stable / no-default-features
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Install stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: cargo clippy --no-default-features
+        run: cargo clippy --no-default-features --all-targets -- -D warnings
+      - name: cargo test --no-default-features
+        run: cargo test --locked --no-default-features
   msrv:
     # check that we can build using the minimal rust version that is specified by this crate
     runs-on: ubuntu-latest

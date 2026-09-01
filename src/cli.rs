@@ -72,6 +72,7 @@ use crate::reporter::{BenchReporter, BencherReporter, JsonReporter, TextReporter
 use crate::runner::BenchOpts;
 use crate::schedule::LoadModel;
 use crate::session::BenchSession;
+#[cfg(feature = "tui")]
 use crate::tui::TuiSettings;
 
 /// Default regression metrics for baseline comparison.
@@ -126,6 +127,7 @@ pub struct BenchCli {
     #[clap(long, short = 'r')]
     pub rate: Option<NonZeroU32>,
 
+    #[cfg(feature = "rate_limit")]
     /// How iterations are paced: closed (workers set the pace) or open (the rate does)
     ///
     /// In the closed model a worker starts its next iteration when the previous one
@@ -225,7 +227,11 @@ impl BenchCli {
             warmups: self.warmup,
             #[cfg(feature = "rate_limit")]
             rate: self.rate,
+            #[cfg(feature = "rate_limit")]
             load_model: self.load_model,
+            // Without a rate there is no schedule to pace against.
+            #[cfg(not(feature = "rate_limit"))]
+            load_model: LoadModel::Closed,
         }
     }
 
@@ -293,6 +299,10 @@ where
     baseline.as_ref().map(|b| b.validate(&opts)).transpose()?;
 
     let session = BenchSession::new(suite).opts(opts);
+    #[cfg(not(feature = "tui"))]
+    let report = session.run().await?;
+
+    #[cfg(feature = "tui")]
     let report = if cli.quiet || !stdout().is_tty() {
         session.run().await
     } else {
@@ -393,4 +403,18 @@ macro_rules! bench_cli_run {
         let b = <$bench_suite>::parse();
         ::rlt::cli::run(b.bench_opts.clone(), b)
     }};
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::CommandFactory;
+
+    use super::BenchCli;
+
+    /// clap validates argument relationships (`requires`, groups) only when a command is
+    /// built, which happens at run time — and only for the feature set being compiled.
+    #[test]
+    fn the_cli_definition_is_valid() {
+        BenchCli::command().debug_assert();
+    }
 }

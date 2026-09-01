@@ -21,7 +21,9 @@ use crate::error::{BenchResult, ConfigError, Error, Result};
 use crate::observer::Observer;
 use crate::phase::{BenchPhase, PauseControl};
 use crate::report::IterReport;
-use crate::schedule::{self, LoadModel, ScheduleCounters};
+#[cfg(feature = "rate_limit")]
+use crate::schedule;
+use crate::schedule::{LoadModel, ScheduleCounters};
 use crate::suite::BenchSuite;
 
 /// Core options for the benchmark runner.
@@ -210,6 +212,8 @@ pub(crate) struct Runner<BS, O> {
     cancel: CancellationToken,
     seq: Arc<AtomicU64>,
     phase_tx: watch::Sender<BenchPhase>,
+    // Only the open-loop dispatcher writes these, and it needs a rate to schedule against.
+    #[cfg_attr(not(feature = "rate_limit"), allow(dead_code))]
     counters: Arc<ScheduleCounters>,
 }
 
@@ -513,11 +517,13 @@ mod tests {
     };
 
     /// A target with a hard ceiling: 8 concurrent slots, 100ms each, so 80/s and no more.
+    #[cfg(feature = "rate_limit")]
     #[derive(Clone)]
     struct Saturating {
         capacity: Arc<tokio::sync::Semaphore>,
     }
 
+    #[cfg(feature = "rate_limit")]
     impl StatelessBenchSuite for Saturating {
         async fn bench(&mut self, _: &IterInfo) -> BenchResult<IterReport> {
             let t = Instant::now();
@@ -528,6 +534,7 @@ mod tests {
     }
 
     /// Run the saturating suite for 20s at 200/s and report (served, offered, dropped).
+    #[cfg(feature = "rate_limit")]
     async fn run_saturating(load_model: crate::LoadModel) -> (u64, u64, u64) {
         let (res_tx, mut res_rx) = mpsc::unbounded();
         let pause = Arc::new(PauseControl::new());
@@ -569,6 +576,7 @@ mod tests {
 
     /// The point of the open model: a target that cannot keep up produces a counted
     /// shortfall, not a lower rate that looks like the target is fine.
+    #[cfg(feature = "rate_limit")]
     #[tokio::test(start_paused = true)]
     async fn open_load_model_reports_the_shortfall() {
         let (served, offered, dropped) = run_saturating(crate::LoadModel::Open).await;
@@ -592,6 +600,7 @@ mod tests {
     /// tokio's, so under a paused clock the iteration count in the closed model says
     /// nothing about how fast the target was; `examples/open_loop.rs` shows both models
     /// against the same target in real time.
+    #[cfg(feature = "rate_limit")]
     #[tokio::test(start_paused = true)]
     async fn closed_load_model_absorbs_the_shortfall() {
         let (served, offered, dropped) = run_saturating(crate::LoadModel::Closed).await;
@@ -601,6 +610,7 @@ mod tests {
         assert_eq!(dropped, 0);
     }
 
+    #[cfg(feature = "rate_limit")]
     #[test]
     fn open_load_model_without_a_rate_is_rejected() {
         let err = BenchOpts::builder().load_model(crate::LoadModel::Open).build().unwrap_err();

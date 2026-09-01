@@ -18,20 +18,28 @@
 //! Backpressure therefore surfaces as [`ScheduleCounters::dropped`] instead of a lower
 //! rate, which is what makes an overloaded target distinguishable from a slow one.
 
+// The dispatcher schedules against a rate, so it exists only where rates do.
+#[cfg(feature = "rate_limit")]
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(feature = "rate_limit")]
 use std::time::Duration;
 
+#[cfg(feature = "rate_limit")]
 use tokio::select;
+#[cfg(feature = "rate_limit")]
 use tokio::sync::mpsc;
+#[cfg(feature = "rate_limit")]
 use tokio_util::sync::CancellationToken;
 
+#[cfg(feature = "rate_limit")]
 use crate::clock::Clock;
 
 /// How often the dispatcher wakes to release due work.
 ///
 /// Fine enough to spread a high rate smoothly, coarse enough to stay cheap. The absolute
 /// schedule means the interval affects only burstiness, never the total.
+#[cfg(feature = "rate_limit")]
 const TICK: Duration = Duration::from_millis(10);
 
 /// How iterations are paced.
@@ -81,6 +89,7 @@ impl ScheduleCounters {
 /// Ends when `duration` of clock time has passed, when `iterations` have been offered, or
 /// when `cancel` fires — whichever comes first. Dropping the sender is how the workers
 /// learn the run is over.
+#[cfg(feature = "rate_limit")]
 pub(crate) async fn dispatch(
     clock: Clock,
     rate_per_second: f64,
@@ -135,7 +144,7 @@ pub(crate) async fn dispatch(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "rate_limit"))]
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;

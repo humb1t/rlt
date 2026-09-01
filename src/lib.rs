@@ -69,6 +69,7 @@ pub mod reporter;
 pub mod runner;
 pub mod session;
 pub mod suite;
+#[cfg(feature = "tui")]
 pub mod tui;
 
 #[cfg(feature = "tracing")]
