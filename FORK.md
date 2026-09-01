@@ -26,9 +26,10 @@ cherry-pickable for an upstream pull request.
 | 6 | `feat/public-stats` | public `histogram` / `stats` modules and a canonical `LatencyStats`, so a consumer can name the types its report is made of | [#6](https://github.com/humb1t/rlt/pull/6) | to be offered |
 | 7 | `feat/throughput-observer` | `observer::Throughput`: a per-second series without the TUI, measured against the session `Clock` | [#7](https://github.com/humb1t/rlt/pull/7) | to be offered |
 | 8 | `feat/run-report` | `run::RunReport<M>` plus JSON and bencher run reporters: several sessions recorded as one document | [#8](https://github.com/humb1t/rlt/pull/8) | not offered — see below |
+| 9 | `feat/text-reporter-feature` | `text` feature so the table reporter can be compiled out (127 → 111 crates), taking `tabled` and `byte-unit` — and the two RUSTSEC findings behind them — with it | [#9](https://github.com/humb1t/rlt/pull/9) | to be offered |
 
-Patches 3, 4, 5, 6 and 7 are self-contained and worth sending upstream; 2 is not,
-and 1 is already an open upstream PR.
+Patches 3, 4, 5, 6, 7 and 9 are self-contained and worth sending upstream; 2 is
+not, and 1 is already an open upstream PR.
 
 Patch 8 is fork-only by decision, not by neglect. A multi-session run concept is
 a large ask for a tool whose shape is one invocation, one `BenchCli`, one
@@ -40,8 +41,20 @@ Patches 5–8 all came out of the first real consumer
 Each closes a seam that only opens when rlt is driven as a library rather than as
 a CLI — which is what patch 1 made possible and what nothing upstream exercises.
 
+Patch 9 is patch 4's argument applied to the other half of the reporting stack.
+`tabled` is reached only from `reporter/text.rs`, and a consumer that collects a
+`RunReport` of its own never renders a table; leaving it wired in meant every
+such consumer inherited two subtrees it never calls: `tabled_derive` with the
+unmaintained `proc-macro-error2` behind it ([RUSTSEC-2026-0173][rustsec-0173]),
+and `byte-unit` with `rust_decimal` and a vulnerable `rkyv`
+([RUSTSEC-2026-0235][rustsec-0235]). Both were `cargo audit` findings in a
+downstream repository for code that repository does not compile.
+
 Patches are offered to `wfxr/rlt` opportunistically. Nothing here is ever blocked
 on upstream review.
+
+[rustsec-0173]: https://rustsec.org/advisories/RUSTSEC-2026-0173
+[rustsec-0235]: https://rustsec.org/advisories/RUSTSEC-2026-0235
 
 ## Conventions
 
