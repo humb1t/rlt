@@ -57,6 +57,54 @@ pub enum LoadModel {
     Open,
 }
 
+impl LoadModel {
+    /// The pacing this model implies when the workers are free to run flat out.
+    ///
+    /// The default a [`BenchOptsBuilder`](crate::BenchOptsBuilder) applies unless the
+    /// caller declares otherwise.
+    pub fn pacing(self) -> Pacing {
+        match self {
+            Self::Open => Pacing::Schedule,
+            Self::Closed => Pacing::Platform,
+        }
+    }
+}
+
+/// What set the pace of a run, and therefore whether its throughput is a result.
+///
+/// A rate is only a measurement of the system under test when the system is what held it
+/// back. When a schedule or the harness set it instead, the number is an echo of the
+/// configuration: it moves when a flag moves and stays put when the target regresses.
+/// Reporters use this to decide which figures are safe to track over time.
+///
+/// [`BenchOptsBuilder`](crate::BenchOptsBuilder) derives a default from the
+/// [`LoadModel`] — [`Open`](LoadModel::Open) is [`Schedule`](Pacing::Schedule), and
+/// [`Closed`](LoadModel::Closed) is [`Platform`](Pacing::Platform) — which is right
+/// whenever the workers are free to run flat out. Override it when they are not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Pacing {
+    /// The system under test set the rate: workers ran flat out and it pushed back.
+    ///
+    /// Throughput is a property of the target and is worth tracking.
+    #[default]
+    Platform,
+
+    /// An open-loop schedule set the rate.
+    ///
+    /// Throughput is an input — it echoes the requested rate back — so tracking it would
+    /// fill a regression history with changes that mean nothing. The shortfall against
+    /// the request is in [`dropped`](crate::BenchReport::dropped) instead.
+    Schedule,
+
+    /// The harness set the rate: a concurrency bound, a semaphore, a fixed slice of work.
+    ///
+    /// The run is closed-loop, so nothing was offered and nothing could be dropped, but
+    /// the wall clock still measures the driver rather than the target. Latency stays
+    /// meaningful; throughput does not.
+    Harness,
+}
+
 /// Counts of what the open-loop schedule asked for and what it could not place.
 ///
 /// Both are zero in the [closed](LoadModel::Closed) model, where the schedule never asks

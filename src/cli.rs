@@ -70,7 +70,7 @@ use crate::clock::Clock;
 use crate::error::ReporterError;
 use crate::reporter::{BenchReporter, BencherReporter, JsonReporter, TextReporter};
 use crate::runner::BenchOpts;
-use crate::schedule::LoadModel;
+use crate::schedule::{LoadModel, Pacing};
 use crate::session::BenchSession;
 #[cfg(feature = "tui")]
 use crate::tui::TuiSettings;
@@ -232,6 +232,13 @@ impl BenchCli {
             // Without a rate there is no schedule to pace against.
             #[cfg(not(feature = "rate_limit"))]
             load_model: LoadModel::Closed,
+            // A CLI run's workers are never held back by the harness, so the load model
+            // alone decides. A library consumer that does hold them back says so through
+            // BenchOptsBuilder::pacing.
+            #[cfg(feature = "rate_limit")]
+            pacing: self.load_model.pacing(),
+            #[cfg(not(feature = "rate_limit"))]
+            pacing: Pacing::Platform,
         }
     }
 
@@ -311,12 +318,13 @@ where
 
     // Compute comparison using pre-loaded baseline.
     //
-    // An open-loop run's rate is an input rather than a result — it echoes --rate back —
-    // so comparing it against a baseline would report a regression whenever that flag
-    // moves. Latency and success ratio stay meaningful, so only the rates are dropped.
-    let regression_metrics: Vec<_> = match report.offered > 0 {
-        false => cli.regression_metrics.clone(),
-        true => cli
+    // A rate the target did not set is an input rather than a result — an open-loop run
+    // echoes --rate back — so comparing it against a baseline would report a regression
+    // whenever that flag moves. Latency and success ratio stay meaningful, so only the
+    // rates are dropped.
+    let regression_metrics: Vec<_> = match report.pacing {
+        Pacing::Platform => cli.regression_metrics.clone(),
+        Pacing::Schedule | Pacing::Harness => cli
             .regression_metrics
             .iter()
             .copied()

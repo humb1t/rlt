@@ -28,6 +28,7 @@ use super::{BenchReporter, ReporterResult};
 use crate::baseline::Comparison;
 use crate::histogram::PERCENTAGES;
 use crate::report::BenchReport;
+use crate::schedule::Pacing;
 use crate::util::rate;
 
 /// A JSON reporter that outputs machine-readable benchmark results.
@@ -85,6 +86,9 @@ impl BenchReporter for JsonReporter {
             },
 
             bytes: BytesSummary { total: overall.bytes, rate: rate(overall.bytes, elapsed) },
+
+            pacing: report.pacing,
+            rate_per_second: report.rate_per_second,
         };
 
         let latency = if report.hist.is_empty() {
@@ -141,6 +145,13 @@ struct Summary {
     /// Present only in the open load model, where the schedule sets the pace.
     #[serde(skip_serializing_if = "Option::is_none")]
     schedule: Option<ScheduleSummary>,
+
+    /// What set the pace, and so whether `iters.rate` is a property of the target.
+    pacing: Pacing,
+
+    /// The rate the run was configured for, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rate_per_second: Option<u32>,
 }
 
 #[derive(Serialize)]

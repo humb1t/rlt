@@ -5,6 +5,7 @@ use tokio::time::Duration;
 
 use crate::BenchOpts;
 use crate::histogram::LatencyHistogram;
+use crate::schedule::Pacing;
 use crate::stats::IterStats;
 use crate::status::{Status, StatusKind};
 
@@ -47,10 +48,28 @@ pub struct BenchReport {
     ///
     /// The shortfall against the requested rate. Zero in the closed model.
     pub dropped: u64,
+
+    /// What set the pace, and therefore whether throughput is a result worth tracking.
+    ///
+    /// Carried through from [`BenchOpts::pacing`](crate::BenchOpts::pacing) so a
+    /// reporter never has to guess it from the counters. See [`Pacing`].
+    pub pacing: Pacing,
+
+    /// The rate the run was configured for, in iterations per second.
+    ///
+    /// `None` when no rate was set. Reported so a paced run's numbers can be read
+    /// against what was asked of it, without the caller having to keep the options
+    /// alongside the report.
+    pub rate_per_second: Option<u32>,
 }
 
 impl From<BenchOpts> for BenchReport {
     fn from(opts: BenchOpts) -> Self {
+        #[cfg(feature = "rate_limit")]
+        let rate_per_second = opts.rate.map(|rate| rate.get());
+        #[cfg(not(feature = "rate_limit"))]
+        let rate_per_second = None;
+
         Self {
             concurrency: opts.concurrency,
             hist: LatencyHistogram::default(),
@@ -60,6 +79,8 @@ impl From<BenchOpts> for BenchReport {
             elapsed: Duration::ZERO,
             offered: 0,
             dropped: 0,
+            pacing: opts.pacing,
+            rate_per_second,
         }
     }
 }

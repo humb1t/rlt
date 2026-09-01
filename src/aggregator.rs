@@ -74,6 +74,11 @@ impl Aggregator {
 
         let elapsed = self.bench_opts.clock.elapsed();
         let concurrency = self.bench_opts.concurrency;
+        #[cfg(feature = "rate_limit")]
+        let rate_per_second = self.bench_opts.rate.map(|rate| rate.get());
+        #[cfg(not(feature = "rate_limit"))]
+        let rate_per_second = None;
+
         Ok(BenchReport {
             concurrency,
             hist,
@@ -83,6 +88,8 @@ impl Aggregator {
             elapsed,
             offered: self.counters.offered(),
             dropped: self.counters.dropped(),
+            pacing: self.bench_opts.pacing,
+            rate_per_second,
         })
     }
 }
