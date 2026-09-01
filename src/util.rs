@@ -4,13 +4,16 @@
 //! - Converting byte counts to human-readable formats (KiB, MiB, GiB, etc.)
 //! - Calculating rates safely (handling division by zero)
 
+#[cfg(any(feature = "text", feature = "tui"))]
 use byte_unit::{Byte, UnitType};
 
+#[cfg(any(feature = "text", feature = "tui"))]
 fn format_byte(byte: Byte, precision: usize) -> String {
     format!("{:.prec$}", byte.get_appropriate_unit(UnitType::Binary), prec = precision)
 }
 
 /// Trait for formatting a value as a human-readable byte string.
+#[cfg(any(feature = "text", feature = "tui"))]
 pub trait HumanBytes {
     /// Formats the value as bytes with the given precision.
     ///
@@ -18,12 +21,14 @@ pub trait HumanBytes {
     fn human_bytes(self, precision: usize) -> String;
 }
 
+#[cfg(any(feature = "text", feature = "tui"))]
 impl HumanBytes for f64 {
     fn human_bytes(self, precision: usize) -> String {
         Byte::from_f64(self).map(|b| format_byte(b, precision)).unwrap_or_else(|| "N/A".to_string())
     }
 }
 
+#[cfg(any(feature = "text", feature = "tui"))]
 impl HumanBytes for u64 {
     fn human_bytes(self, precision: usize) -> String {
         format_byte(Byte::from_u64(self), precision)

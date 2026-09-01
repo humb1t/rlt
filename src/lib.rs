@@ -52,6 +52,7 @@
 
 mod aggregator;
 pub mod clock;
+#[cfg(any(feature = "text", feature = "tui"))]
 mod duration;
 pub mod error;
 pub mod histogram;

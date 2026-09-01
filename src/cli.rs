@@ -68,7 +68,9 @@ use crate::BenchSuite;
 use crate::baseline::{self, BaselineName, RegressionMetric, Verdict};
 use crate::clock::Clock;
 use crate::error::ReporterError;
-use crate::reporter::{BenchReporter, BencherReporter, JsonReporter, TextReporter};
+#[cfg(feature = "text")]
+use crate::reporter::TextReporter;
+use crate::reporter::{BenchReporter, BencherReporter, JsonReporter};
 use crate::runner::BenchOpts;
 use crate::schedule::{LoadModel, Pacing};
 use crate::session::BenchSession;
@@ -158,7 +160,13 @@ pub struct BenchCli {
     pub quit_manually: bool,
 
     /// Output format for the report
+    #[cfg(feature = "text")]
     #[clap(short, long, value_enum, default_value_t = ReportFormat::Text, ignore_case = true)]
+    pub output: ReportFormat,
+
+    /// Output format for the report
+    #[cfg(not(feature = "text"))]
+    #[clap(short, long, value_enum, default_value_t = ReportFormat::Json, ignore_case = true)]
     pub output: ReportFormat,
 
     /// Namespace every bencher metric with this prefix
@@ -276,7 +284,8 @@ pub enum Collector {
 /// Benchmark report format.
 #[derive(Copy, Clone, Debug, ValueEnum)]
 pub enum ReportFormat {
-    /// Report in plain text format. See [`TextReporter`].
+    /// Report in plain text format. See [`TextReporter`](crate::reporter::TextReporter).
+    #[cfg(feature = "text")]
     Text,
 
     /// Report in JSON format. See [`JsonReporter`].
@@ -351,6 +360,7 @@ where
     };
 
     match cli.output {
+        #[cfg(feature = "text")]
         ReportFormat::Text => TextReporter.print(&mut output, &report, cmp.as_ref())?,
         ReportFormat::Json => JsonReporter.print(&mut output, &report, cmp.as_ref())?,
         ReportFormat::Bencher => BencherReporter::new(cli.bencher_prefix.clone()).print(
@@ -364,6 +374,7 @@ where
     if let Some(ref name) = cli.save_baseline {
         baseline::save(&baseline_dir, name, &report, &cli)?;
         // Only print save message in Text mode to keep JSON output clean
+        #[cfg(feature = "text")]
         if matches!(cli.output, ReportFormat::Text) {
             eprintln!();
             eprintln!(
