@@ -45,10 +45,12 @@ pub struct IterStats {
 }
 
 impl IterStats {
+    /// Create an empty set of statistics.
     pub fn new() -> Self {
         Self { overall: Counter::default(), by_status: HashMap::new() }
     }
 
+    /// Fold one iteration into the overall counter and into its status's counter.
     pub fn record(&mut self, report: &IterReport) {
         self.overall.record(report);
         let counter = self.by_status.entry(report.status).or_default();
